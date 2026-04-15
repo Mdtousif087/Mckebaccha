@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import cloudscraper
 import os
+import json
 
 app = Flask(__name__)
 
@@ -56,13 +57,31 @@ def clone_api():
             timeout=30
         )
         
-        # Return the response
-        return jsonify(response.json()), response.status_code
+        # Check if response is empty
+        if not response.text:
+            return jsonify({
+                "status": False,
+                "error": "Empty response from real API",
+                "vehicle": vnums
+            }), 502
+        
+        # Try to parse JSON
+        try:
+            data = response.json()
+            return jsonify(data), response.status_code
+        except json.JSONDecodeError as e:
+            # Return raw response for debugging
+            return jsonify({
+                "status": False,
+                "error": "Invalid JSON from real API",
+                "details": str(e),
+                "raw_response": response.text[:500]  # First 500 chars
+            }), 502
         
     except cloudscraper.exceptions.CloudflareChallengeError as e:
         return jsonify({
             "status": False,
-            "error": "Cloudflare challenge failed",
+            "error": "Cloudflare challenge failed. Try again.",
             "details": str(e)
         }), 503
         
@@ -77,6 +96,5 @@ def clone_api():
 def health_check():
     return jsonify({"status": "ok", "message": "API is running"}), 200
 
-# For local testing
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)
